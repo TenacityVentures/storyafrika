@@ -10,6 +10,8 @@ export default function WaitList() {
   const [hasMounted, setHasMounted] = useState(false)
   const [currentSlide, setCurrentSlide] = useState<number>(0)
   const [email, setEmail] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [joinedCount, setJoinedCount] = useState<number>(() => {
     if (typeof window !== "undefined") {
       const stored = window.localStorage.getItem("waitlistCount")
@@ -280,15 +282,40 @@ export default function WaitList() {
     setCurrentSlide((s) => Math.min(s + 1, 3))
   }
 
-  const joinWaitlist = (e: React.FormEvent) => {
+  const joinWaitlist = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email.trim()) return
-    const newCount = joinedCount + 1
-    setJoinedCount(newCount)
+    
+    setIsSubmitting(true)
+    setSubmitError(null)
+    
     try {
-      window.localStorage.setItem("waitlistCount", String(newCount))
-    } catch {}
-    setCurrentSlide(3)
+      const response = await fetch("/api/join-waitlist", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      })
+      
+      if (!response.ok) {
+        throw new Error("Failed to join waitlist")
+      }
+      
+      const data = await response.json()
+      const newCount = data.waitlist_count || joinedCount + 1
+      setJoinedCount(newCount)
+      try {
+        window.localStorage.setItem("waitlistCount", String(newCount))
+      } catch {}
+      
+      setCurrentSlide(3)
+    } catch (error) {
+      console.error("Error joining waitlist:", error)
+      setSubmitError("Something went wrong. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -396,18 +423,24 @@ export default function WaitList() {
                     placeholder="you@example.com"
                     className="flex-1 px-5 py-4 rounded-full bg-white/20 border border-white/30 text-white placeholder:text-white/70 focus:outline-none focus:ring-2 focus:ring-white/60"
                     required
+                    disabled={isSubmitting}
                   />
                   <button
                     type="submit"
-                    className="bg-white hover:bg-gray-100 text-gray-900 font-semibold text-lg px-8 py-4 rounded-full shadow-lg transition-all hover:scale-105 active:scale-95"
+                    disabled={isSubmitting}
+                    className="bg-white hover:bg-gray-100 text-gray-900 font-semibold text-lg px-8 py-4 rounded-full shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                   >
-                    Join
+                    {isSubmitting ? "Joining..." : "Join"}
                   </button>
                 </div>
+                {submitError && (
+                  <p className="text-red-300 text-sm">{submitError}</p>
+                )}
                 <button
                   type="button"
                   onClick={nextSlide}
-                  className="mt-6 text-white/80 underline hover:text-white"
+                  disabled={isSubmitting}
+                  className="mt-6 text-white/80 underline hover:text-white disabled:opacity-50"
                 >
                   Skip
                 </button>
@@ -420,7 +453,7 @@ export default function WaitList() {
                   Already joined: {joinedCount.toLocaleString()}
                 </h4>
                 <p className="text-white/80 mb-8 text-lg">
-                  Thank you — we’re building a home for African stories.
+                  Thank you — we're building a home for African stories.
                 </p>
                 <button
                   onClick={() => setCurrentSlide(0)}
