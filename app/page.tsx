@@ -6,6 +6,8 @@ import { AnimatePresence, motion } from "framer-motion"
 
 export default function WaitList() {
   const [imagePositions, setImagePositions] = useState<{ x: number; y: number }[]>([])
+  const [idleOffsets, setIdleOffsets] = useState<{ x: number; y: number }[]>([])
+  const [hasMounted, setHasMounted] = useState(false)
   const [currentSlide, setCurrentSlide] = useState<number>(0)
   const [email, setEmail] = useState("")
   const [joinedCount, setJoinedCount] = useState<number>(() => {
@@ -194,6 +196,37 @@ export default function WaitList() {
   useEffect(() => {
     const initialPositions = photoCards.map(() => ({ x: 0, y: 0 }))
     setImagePositions(initialPositions)
+    setIdleOffsets(photoCards.map(() => ({ x: 0, y: 0 })))
+
+    const revealTimer = setTimeout(() => setHasMounted(true), 150)
+    return () => clearTimeout(revealTimer)
+  }, [])
+
+  useEffect(() => {
+    const makeZeroOffsets = () => photoCards.map(() => ({ x: 0, y: 0 }))
+
+    let resetTimeout: number | null = null
+    const triggerJitter = () => {
+      setIdleOffsets(
+        photoCards.map(() => ({
+          x: (Math.random() - 0.5) * 24,
+          y: (Math.random() - 0.5) * 24,
+        })),
+      )
+
+      resetTimeout = window.setTimeout(() => {
+        setIdleOffsets(makeZeroOffsets())
+      }, 2200)
+    }
+
+    const initialKick = window.setTimeout(triggerJitter, 2600)
+    const interval = window.setInterval(triggerJitter, 7800)
+
+    return () => {
+      window.clearTimeout(initialKick)
+      window.clearInterval(interval)
+      if (resetTimeout) window.clearTimeout(resetTimeout)
+    }
   }, [])
 
   useEffect(() => {
@@ -268,18 +301,34 @@ export default function WaitList() {
     >
       {photoCards.map((card, index) => {
         const position = imagePositions[index] || { x: 0, y: 0 }
+        const idle = idleOffsets[index] || { x: 0, y: 0 }
         const angle = (index / photoCards.length) * Math.PI * 2
-        const baseRadius = 120 // increase to space images further apart
+        const baseRadius = 200 // space images further apart from the center
         const baseOffsetX = Math.cos(angle) * baseRadius
         const baseOffsetY = Math.sin(angle) * baseRadius
+        const translateX = position.x + baseOffsetX + idle.x
+        const translateY = position.y + baseOffsetY + idle.y
+        const distanceFromCenter = Math.sqrt(baseOffsetX * baseOffsetX + baseOffsetY * baseOffsetY)
+        const rippleDelay = 0.45 + distanceFromCenter / 900
         return (
-          <div
+          <motion.div
             key={card.id}
             className={`absolute ${card.className} rounded-2xl overflow-hidden shadow-2xl`}
-            style={{
-              transform: `translate(${position.x + baseOffsetX}px, ${position.y + baseOffsetY}px)`,
-              willChange: "transform",
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{
+              opacity: hasMounted ? 1 : 0,
+              scale: hasMounted ? 1 : 0.9,
+              x: translateX,
+              y: translateY,
             }}
+            transition={{
+              delay: rippleDelay,
+              opacity: { duration: 0.8 },
+              scale: { type: "spring", stiffness: 160, damping: 18 },
+              x: { type: "spring", stiffness: 80, damping: 20 },
+              y: { type: "spring", stiffness: 80, damping: 20 },
+            }}
+            style={{ willChange: "transform" }}
           >
             <Image src={card.src || "/placeholder.svg"} alt={card.alt} fill className="object-cover" />
             {/*card.hasOverlay && (
@@ -288,7 +337,7 @@ export default function WaitList() {
                 <span className="text-white text-sm font-medium">Amazing ocean sunset</span>
               </div>
             )*/}
-          </div>
+          </motion.div>
         )
       })}
 
@@ -302,7 +351,7 @@ export default function WaitList() {
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             className="w-full max-w-2xl rounded-[2.5rem] backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl p-12 text-center"
             style={{
-              transform: `translate(${(imagePositions[0]?.x || 0) * 0.15}px, ${(imagePositions[0]?.y || 0) * 0.15}px)`,
+              transform: `translate(${(imagePositions[0]?.x || 0) * 0.15 + (idleOffsets[0]?.x || 0) * 0.08}px, ${(imagePositions[0]?.y || 0) * 0.15 + (idleOffsets[0]?.y || 0) * 0.08}px)`,
               willChange: "transform",
             }}
           >
